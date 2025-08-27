@@ -231,6 +231,29 @@
       return { left: mk(c1), right: mk(c2) };
     }
 
+    function enhanceClassRow(detail, val1, val2, status) {
+      if (detail !== 'class') return null;
+      const toTokens = (v) => (v || '').trim().split(/\s+/).filter(Boolean);
+      const t1 = toTokens(val1);
+      const t2 = toTokens(val2);
+      const set2 = new Set(t2);
+      const common = Array.from(new Set(t1.filter(x => set2.has(x))));
+
+      const bolded = (tokens, commons) => tokens.map(tok => commons.includes(tok)
+        ? `<b>${escapeHTML(tok)}</b>`
+        : escapeHTML(tok)
+      ).join(' ');
+
+      const val1html = t1.length ? bolded(t1, common) : '<i>none</i>';
+      const val2html = t2.length ? bolded(t2, common) : '<i>none</i>';
+
+      let statusHTML = status;
+      if (status !== 'same' && common.length) {
+        statusHTML = `different,<br>Except:` + common.map(c => `<br>- ${escapeHTML(c)}`).join('');
+      }
+      return { val1html, val2html, statusHTML };
+    }
+
     function compareChildren(el1, el2) {
       return compareNodeRecursive(el1, el2, 'root', 'root');
     }
@@ -322,12 +345,22 @@
         else if (status === 'different') rowClass = 'different';
         else rowClass = 'missing';
 
+        let v1 = value1 || '<i>none</i>';
+        let v2 = value2 || '<i>none</i>';
+        let st = status;
+        const enhanced = enhanceClassRow(attribute, value1, value2, status);
+        if (enhanced) {
+          v1 = enhanced.val1html;
+          v2 = enhanced.val2html;
+          st = enhanced.statusHTML;
+        }
+
         html += `
           <tr class="${rowClass}">
             <td>${attribute}</td>
-            <td>${value1 || '<i>none</i>'}</td>
-            <td>${value2 || '<i>none</i>'}</td>
-            <td>${status}</td>
+            <td>${v1}</td>
+            <td>${v2}</td>
+            <td>${st}</td>
           </tr>
         `;
       }
@@ -409,12 +442,21 @@
           for (const { detail, val1, val2, status } of attrComps) {
             const rowClass = status === 'same' ? 'same' :
                              status === 'different' ? 'different' : 'missing';
+            let v1 = val1 || '<i>none</i>';
+            let v2 = val2 || '<i>none</i>';
+            let st = status;
+            const enhanced = enhanceClassRow(detail, val1, val2, status);
+            if (enhanced) {
+              v1 = enhanced.val1html;
+              v2 = enhanced.val2html;
+              st = enhanced.statusHTML;
+            }
             html += `
               <tr class="${rowClass}">
                 <td>${detail}</td>
-                <td>${val1 || '<i>none</i>'}</td>
-                <td>${val2 || '<i>none</i>'}</td>
-                <td>${status}</td>
+                <td>${v1}</td>
+                <td>${v2}</td>
+                <td>${st}</td>
               </tr>
             `;
           }
