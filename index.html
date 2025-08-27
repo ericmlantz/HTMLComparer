@@ -249,7 +249,7 @@
 
       let statusHTML = status;
       if (status !== 'same' && common.length) {
-        statusHTML = `different,<br>Except:` + common.map(c => `<br>- ${escapeHTML(c)}`).join('');
+        statusHTML = `different,<br>except:` + common.map(c => `<br>- ${escapeHTML(c)}`).join('');
       }
       return { val1html, val2html, statusHTML };
     }
