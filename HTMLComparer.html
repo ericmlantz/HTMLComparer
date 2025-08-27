@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>HTML Element Comparator</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+    }
+    textarea {
+      width: 100%;
+      height: 300px;
+      margin: 10px 0;
+      vertical-align: top;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-top: 20px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+    }
+    th {
+      background: #f2f2f2;
+    }
+    .same { background-color: #d4edda; }
+    .different { background-color: #f8d7da; }
+    .missing { background-color: #fff3cd; }
+    .section-header {
+      margin-top: 30px;
+      font-weight: bold;
+      font-size: 18px;
+    }
+  </style>
+  <style>
+    summary.dual-triangles {
+      position: relative;
+      cursor: pointer;
+      list-style: none;
+    }
+    summary.dual-triangles::-webkit-details-marker {
+      display: none;
+    }
+    summary.dual-triangles::before,
+    summary.dual-triangles::after {
+      content: "▶";
+      color: #888;
+      font-size: 0.9em;
+      transition: transform 0.2s ease;
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+    }
+    summary.dual-triangles::before {
+      left: 0;
+    }
+    summary.dual-triangles::after {
+      right: 0;
+      margin-right: var(--right-indent, 0px);
+    }
+    details[open] > summary.dual-triangles::before,
+    details[open] > summary.dual-triangles::after {
+      transform: translateY(-50%) rotate(90deg);
+    }
+  </style>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markup.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/line-numbers/prism-line-numbers.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/line-numbers/prism-line-numbers.min.js"></script>
+<style>
+  .code-editor {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: 300px;
+    margin: 10px 0;
+    padding: 10px;
+    border: 1px solid #ccc;
+    font-family: monospace;
+    overflow-y: auto;
+    overflow-x: hidden;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    background-color: #f5f5f5;
+    box-sizing: border-box;
+  }
+  .editor-container {
+    display: flex;
+    flex-direction: row;
+    gap: 20px;
+  }
+  /* Make the editable PRE wrap instead of forcing a single long line */
+  pre.editor {
+    white-space: pre-wrap !important;
+    overflow-x: hidden !important;
+    max-width: 100%;
+  }
+  pre.editor > code.code-editor {
+    white-space: inherit !important; /* follow the PRE's wrapping */
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    display: block;
+  }
+</style>
+</head>
+<body>
+
+  <h2>Compare Two HTML Elements</h2>
+
+  <div class="editor-container">
+    <div style="width: 50%;">
+      <label for="element1" style="font-weight: bold;">Element 1</label>
+      <pre class="editor"><code id="element1" class="code-editor language-markup" contenteditable="true" spellcheck="false" data-placeholder="Paste first HTML element here"></code></pre>
+    </div>
+    <div style="width: 50%;">
+      <label for="element2" style="font-weight: bold;">Element 2</label>
+      <pre class="editor"><code id="element2" class="code-editor language-markup" contenteditable="true" spellcheck="false" data-placeholder="Paste second HTML element here"></code></pre>
+    </div>
+  </div>
+
+  <button onclick="compare()">Compare</button>
+
+  <div id="result"></div>
+
+  <script>
+    function compare() {
+      const html1 = document.getElementById('element1').innerText.trim();
+      const html2 = document.getElementById('element2').innerText.trim();
+      const container1 = document.createElement('div');
+      const container2 = document.createElement('div');
+
+      container1.innerHTML = html1;
+      container2.innerHTML = html2;
+
+      // Automatically format and display the HTML content in the code editors
+      if (container1.firstElementChild) {
+        const formatted1 = formatHTML(container1.firstElementChild.outerHTML);
+        const el1 = document.getElementById('element1');
+        el1.textContent = formatted1;
+      }
+      if (container2.firstElementChild) {
+        const formatted2 = formatHTML(container2.firstElementChild.outerHTML);
+        const el2 = document.getElementById('element2');
+        el2.textContent = formatted2;
+      }
+      Prism.highlightAll();
+
+      const el1 = container1.firstElementChild;
+      const el2 = container2.firstElementChild;
+
+      if (!el1 || !el2) {
+        document.getElementById('result').innerHTML = '<p style="color:red;">Please ensure both elements are valid and non-empty.</p>';
+        return;
+      }
+
+      const tagComparison = compareSimple('Tag Name', el1.tagName.toLowerCase(), el2.tagName.toLowerCase());
+      const textComparison = compareSimple('Inner Text', el1.textContent.trim(), el2.textContent.trim());
+      const attrComparison = compareAttributes(el1, el2);
+      const childComparison = compareChildren(el1, el2);
+
+      let html = '';
+
+      html += `<div style="text-align: center; font-size: 24px; font-weight: bold; margin-top: 40px;">Root Comparison Summary</div>`;
+      html += renderSimple(tagComparison);
+      html += renderSimple(textComparison);
+      html += renderTable("Attribute Comparison", attrComparison);
+      html += `<hr>`;
+
+      html += `<div style="text-align: center; font-size: 24px; font-weight: bold; margin-top: 40px;">Child Structure Comparison</div>`;
+      html += renderChildComparison(childComparison);
+
+      document.getElementById('result').innerHTML = html;
+      Prism.highlightAll();
+    }
+
+    function compareSimple(label, value1, value2) {
+      const status = value1 === value2 ? 'same' : 'different';
+      return { label, value1, value2, status };
+    }
+
+    function compareAttributes(el1, el2) {
+      if (!el1 || !el1.attributes || !el2 || !el2.attributes) return [];
+
+      const allAttrs = new Set();
+      for (const attr of el1.attributes) allAttrs.add(attr.name);
+      for (const attr of el2.attributes) allAttrs.add(attr.name);
+
+      const result = [];
+      for (const name of allAttrs) {
+        const val1 = el1.getAttribute(name);
+        const val2 = el2.getAttribute(name);
+        let status;
+        if (val1 === val2) status = 'same';
+        else if (val1 === null) status = 'missing in el1';
+        else if (val2 === null) status = 'missing in el2';
+        else status = 'different';
+
+        result.push({ attribute: name, value1: val1, value2: val2, status });
+      }
+      return result;
+    }
+
+    function escapeHTML(str) {
+      if (str == null) return '';
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function openingTag(el) {
+      if (!el) return '<none>';
+      const html = el.outerHTML || '';
+      const m = html.match(/^<[^>]+>/);
+      return m ? m[0] : `<${(el.tagName || '').toLowerCase()}>`;
+    }
+
+    function childHeader(c1, c2) {
+      const mk = (el) => {
+        const tag = openingTag(el);
+        const truncated = tag.length > 180 ? tag.slice(0, 177) + '…>' : tag;
+        return escapeHTML(truncated);
+      };
+      return { left: mk(c1), right: mk(c2) };
+    }
+
+    function compareChildren(el1, el2) {
+      return compareNodeRecursive(el1, el2, 'root', 'root');
+    }
+
+    function compareNodeRecursive(el1, el2, path, header) {
+      const results = [];
+
+      const tag1 = el1?.tagName?.toLowerCase() || '<none>';
+      const tag2 = el2?.tagName?.toLowerCase() || '<none>';
+
+      let tagStatus = (tag1 === tag2) ? 'same' : 'different';
+
+      results.push({
+        path,
+        header,
+        type: 'tag',
+        detail: 'Tag Name',
+        val1: tag1,
+        val2: tag2,
+        status: tagStatus
+      });
+
+      const attrComparison = compareAttributes(el1 || {}, el2 || {}).map(attr => ({
+        path,
+        header,
+        type: 'attribute',
+        detail: attr.attribute,
+        val1: attr.value1,
+        val2: attr.value2,
+        status: attr.status
+      }));
+
+      results.push(...attrComparison);
+
+      const text1 = el1?.textContent?.trim() || '';
+      const text2 = el2?.textContent?.trim() || '';
+      const textStatus = text1 === text2 ? 'same' : 'different';
+
+      results.push({
+        path,
+        header,
+        type: 'text',
+        detail: 'Text Content',
+        val1: text1,
+        val2: text2,
+        status: textStatus
+      });
+
+      const children1 = Array.from(el1?.children || []);
+      const children2 = Array.from(el2?.children || []);
+      const max = Math.max(children1.length, children2.length);
+
+      for (let i = 0; i < max; i++) {
+        const c1 = children1[i];
+        const c2 = children2[i];
+        const childPath = `${path} > child[${i}]`;
+        const childHdr = childHeader(c1, c2);
+        results.push(...compareNodeRecursive(c1, c2, childPath, childHdr));
+      }
+
+      return results;
+    }
+
+    function renderSimple(comp) {
+      const colorClass = comp.status === 'same' ? 'same' : 'different';
+      return `
+        <div class="section-header">${comp.label}</div>
+        <table>
+          <thead><tr><th>Element 1</th><th>Element 2</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr class="${colorClass}">
+              <td>${comp.value1 || '<i>empty</i>'}</td>
+              <td>${comp.value2 || '<i>empty</i>'}</td>
+              <td>${comp.status}</td>
+            </tr>
+          </tbody>
+        </table>
+      `;
+    }
+
+    function renderTable(title, comparisons) {
+      let html = `<div class="section-header">${title}</div><table><thead><tr>
+        <th>Attribute</th><th>Element 1</th><th>Element 2</th><th>Status</th>
+      </tr></thead><tbody>`;
+
+      for (const { attribute, value1, value2, status } of comparisons) {
+        let rowClass = '';
+        if (status === 'same') rowClass = 'same';
+        else if (status === 'different') rowClass = 'different';
+        else rowClass = 'missing';
+
+        html += `
+          <tr class="${rowClass}">
+            <td>${attribute}</td>
+            <td>${value1 || '<i>none</i>'}</td>
+            <td>${value2 || '<i>none</i>'}</td>
+            <td>${status}</td>
+          </tr>
+        `;
+      }
+
+      html += '</tbody></table>';
+      return html;
+    }
+
+    function renderChildComparison(comparisons) {
+      const grouped = {};
+
+      for (const entry of comparisons) {
+        if (entry.path === 'root') continue;
+        if (!grouped[entry.path]) grouped[entry.path] = [];
+        grouped[entry.path].push(entry);
+      }
+
+      let html = '';
+
+      for (const path in grouped) {
+        const depth = path.split('>').length - 2;
+        const indent = depth * 20;
+        const h = (grouped[path][0] && grouped[path][0].header) ? grouped[path][0].header : null;
+        let headerHTML;
+        if (h && typeof h === 'object') {
+          headerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; gap: 12px;">
+              <code class="language-markup" style="text-align: left; background: #f5f5f5; padding: 2px 6px; border-radius: 4px;">${h.left}</code>
+              <code class="language-markup" style="text-align: right; background: #f5f5f5; padding: 2px 6px; border-radius: 4px; margin-right: ${indent}px;">${h.right}</code>
+            </div>
+          `;
+        } else {
+          const fallback = h || path;
+          headerHTML = `<code class="language-markup">${fallback}</code>`;
+        }
+        html += `<details style="margin-left: ${indent}px;"><summary class="dual-triangles" style="--right-indent: ${indent}px; font-size: 1.1em; font-weight: bold; padding: 8px 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${headerHTML}</summary><div class="child-body" style="padding-right: ${indent}px;">`;
+
+        const tagComp = grouped[path].find(e => e.type === 'tag');
+        const textComp = grouped[path].find(e => e.type === 'text');
+        const attrComps = grouped[path].filter(e => e.type === 'attribute');
+
+        if (tagComp) {
+          const rowClass = tagComp.status === 'same' ? 'same' : 'different';
+          html += `
+            <h3>Tag Name</h3>
+            <table>
+              <thead><tr><th>Element 1</th><th>Element 2</th><th>Status</th></tr></thead>
+              <tbody>
+                <tr class="${rowClass}">
+                  <td>${tagComp.val1 || '<i>empty</i>'}</td>
+                  <td>${tagComp.val2 || '<i>empty</i>'}</td>
+                  <td>${tagComp.status}</td>
+                </tr>
+              </tbody>
+            </table>
+          `;
+        }
+
+        if (textComp) {
+          const rowClass = textComp.status === 'same' ? 'same' : 'different';
+          html += `
+            <h3>Text Content</h3>
+            <table>
+              <thead><tr><th>Element 1</th><th>Element 2</th><th>Status</th></tr></thead>
+              <tbody>
+                <tr class="${rowClass}">
+                  <td>${textComp.val1 || '<i>empty</i>'}</td>
+                  <td>${textComp.val2 || '<i>empty</i>'}</td>
+                  <td>${textComp.status}</td>
+                </tr>
+              </tbody>
+            </table>
+          `;
+        }
+
+        if (attrComps.length > 0) {
+          html += `<h3>Attributes</h3>`;
+          html += `<table><thead><tr><th>Attribute</th><th>Element 1</th><th>Element 2</th><th>Status</th></tr></thead><tbody>`;
+          for (const { detail, val1, val2, status } of attrComps) {
+            const rowClass = status === 'same' ? 'same' :
+                             status === 'different' ? 'different' : 'missing';
+            html += `
+              <tr class="${rowClass}">
+                <td>${detail}</td>
+                <td>${val1 || '<i>none</i>'}</td>
+                <td>${val2 || '<i>none</i>'}</td>
+                <td>${status}</td>
+              </tr>
+            `;
+          }
+          html += '</tbody></table>';
+        }
+
+        html += `</div></details><hr>`;
+      }
+
+      return html;
+    }
+    Prism.highlightAll();
+    // Placeholder logic for code editors
+    ['element1', 'element2'].forEach(id => {
+      const el = document.getElementById(id);
+      el.innerHTML = `<span style="color: #aaa;">${el.dataset.placeholder}</span>`;
+      el.addEventListener('focus', function handleFocus() {
+        if (el.innerText.includes(el.dataset.placeholder)) {
+          el.innerText = '';
+          el.removeEventListener('focus', handleFocus);
+        }
+      });
+    });
+
+    // Helper to format HTML with indentation
+    function formatHTML(html) {
+      const tab = '  ';
+      let indent = '';
+      let result = '';
+
+      html = html.replace(/>\s*</g, '><').trim(); // Minify to avoid splitting in wrong places
+      const tokens = html.split(/(?=<)/g); // Split at start of each tag
+
+      for (let token of tokens) {
+        if (token.match(/^<\/\w/)) {
+          indent = indent.slice(0, -tab.length);
+        }
+        result += indent + token.trim() + '\n';
+        if (token.match(/^<\w[^>]*[^/]>/) && !token.includes('</')) {
+          indent += tab;
+        }
+      }
+      return result.trim();
+    }
+  </script>
+</body>
+</html>
