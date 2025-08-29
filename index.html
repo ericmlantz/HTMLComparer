@@ -65,6 +65,44 @@
     details[open] > summary.dual-triangles::after {
       transform: translateY(-50%) rotate(90deg);
     }
+    /* Equal-width halves for Element 1 / Element 2 across tables */
+table.simple-table,
+table.attr-table,
+table.child-attr-table,
+table.child-tag-table,
+table.child-text-table {
+  table-layout: fixed;     /* obey colgroup widths */
+  width: 100%;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+}
+
+/* 3-col simple tables: Element1 | Element2 | Status */
+table.simple-table col:nth-child(1) { width: 45%; }
+table.simple-table col:nth-child(2) { width: 45%; }
+table.simple-table col:nth-child(3) { width: 10%; }
+
+/* 4-col attribute tables: Attribute | Element1 | Element2 | Status */
+table.attr-table col:nth-child(1),
+table.child-attr-table col:nth-child(1) { width: 20%; }
+table.attr-table col:nth-child(2),
+table.child-attr-table col:nth-child(2) { width: 40%; }
+table.attr-table col:nth-child(3),
+table.child-attr-table col:nth-child(3) { width: 40%; }
+table.attr-table col:nth-child(4),
+table.child-attr-table col:nth-child(4) { width: 10%; }
+
+/* Even split header halves */
+.header-split {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 12px;
+}
+.header-split .left-half,
+.header-split .right-half { flex: 1 1 0; }
+.header-split .left-half { text-align: left; }
+.header-split .right-half { text-align: right; }
   </style>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
@@ -254,6 +292,78 @@
       return { val1html, val2html, statusHTML };
     }
 
+    // ---- ID comparison helpers ----
+    function findCommonSubstrings(a, b, minLen = 3) {
+      a = a || '';
+      b = b || '';
+      if (!a || !b) return [];
+      const n = a.length, m = b.length;
+      const dp = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+      const found = new Set();
+      for (let i = 1; i <= n; i++) {
+        for (let j = 1; j <= m; j++) {
+          if (a[i - 1] === b[j - 1]) {
+            dp[i][j] = dp[i - 1][j - 1] + 1;
+            if (dp[i][j] >= minLen) {
+              const sub = a.slice(i - dp[i][j], i);
+              found.add(sub);
+            }
+          }
+        }
+      }
+      // Keep only maximal substrings (remove any that are contained in a longer one)
+      const arr = Array.from(found).sort((x, y) => y.length - x.length || x.localeCompare(y));
+      const kept = [];
+      for (const s of arr) {
+        if (!kept.some(k => k.includes(s))) {
+          kept.push(s);
+        }
+      }
+      return kept;
+    }
+
+    function highlightSubstrings(str, subs) {
+      if (!str) return '<i>none</i>';
+      if (!subs || subs.length === 0) return escapeHTML(str);
+      const marks = new Array(str.length).fill(false);
+      for (const sub of subs) {
+        if (!sub) continue;
+        let idx = str.indexOf(sub);
+        while (idx !== -1) {
+          for (let k = idx; k < idx + sub.length; k++) marks[k] = true;
+          idx = str.indexOf(sub, idx + 1);
+        }
+      }
+      let out = '';
+      let i = 0;
+      while (i < str.length) {
+        if (marks[i]) {
+          let j = i;
+          while (j < str.length && marks[j]) j++;
+          out += '<b>' + escapeHTML(str.slice(i, j)) + '</b>';
+          i = j;
+        } else {
+          let j = i;
+          while (j < str.length && !marks[j]) j++;
+          out += escapeHTML(str.slice(i, j));
+          i = j;
+        }
+      }
+      return out || '<i>none</i>';
+    }
+
+    function enhanceIdRow(detail, val1, val2, status) {
+      if (detail !== 'id') return null;
+      const commons = findCommonSubstrings(val1 || '', val2 || '', 3);
+      const v1 = highlightSubstrings(val1 || '', commons);
+      const v2 = highlightSubstrings(val2 || '', commons);
+      let st = status;
+      if (status !== 'same' && commons.length) {
+        st = 'different,<br>except:' + commons.map(c => `<br>- ${escapeHTML(c)}`).join('');
+      }
+      return { val1html: v1 || '<i>none</i>', val2html: v2 || '<i>none</i>', statusHTML: st };
+    }
+
     function compareChildren(el1, el2) {
       return compareNodeRecursive(el1, el2, 'root', 'root');
     }
@@ -321,7 +431,10 @@
       const colorClass = comp.status === 'same' ? 'same' : 'different';
       return `
         <div class="section-header">${comp.label}</div>
-        <table>
+        <table class="simple-table">
+  <colgroup>
+    <col><col><col>
+  </colgroup>
           <thead><tr><th>Element 1</th><th>Element 2</th><th>Status</th></tr></thead>
           <tbody>
             <tr class="${colorClass}">
@@ -335,9 +448,7 @@
     }
 
     function renderTable(title, comparisons) {
-      let html = `<div class="section-header">${title}</div><table><thead><tr>
-        <th>Attribute</th><th>Element 1</th><th>Element 2</th><th>Status</th>
-      </tr></thead><tbody>`;
+      let html = `<div class="section-header">${title}</div><table class="attr-table"><colgroup><col><col><col><col></colgroup><thead><tr><th>Attribute</th><th>Element 1</th><th>Element 2</th><th>Status</th></tr></thead><tbody>`;
 
       for (const { attribute, value1, value2, status } of comparisons) {
         let rowClass = '';
@@ -353,6 +464,13 @@
           v1 = enhanced.val1html;
           v2 = enhanced.val2html;
           st = enhanced.statusHTML;
+        }
+        // ---- ID enhancement ----
+        const enhancedId = enhanceIdRow(attribute, value1, value2, st);
+        if (enhancedId) {
+          v1 = enhancedId.val1html;
+          v2 = enhancedId.val2html;
+          st = enhancedId.statusHTML;
         }
 
         html += `
@@ -387,11 +505,15 @@
         let headerHTML;
         if (h && typeof h === 'object') {
           headerHTML = `
-            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; gap: 12px;">
-              <code class="language-markup" style="text-align: left; background: #f5f5f5; padding: 2px 6px; border-radius: 4px;">${h.left}</code>
-              <code class="language-markup" style="text-align: right; background: #f5f5f5; padding: 2px 6px; border-radius: 4px; margin-right: ${indent}px;">${h.right}</code>
-            </div>
-          `;
+  <div class="header-split">
+    <div class="left-half">
+      <code class="language-markup" style="background: #f5f5f5; padding: 2px 6px; border-radius: 4px;">${h.left}</code>
+    </div>
+    <div class="right-half" style="padding-right: ${indent}px;">
+      <code class="language-markup" style="background: #f5f5f5; padding: 2px 6px; border-radius: 4px;">${h.right}</code>
+    </div>
+  </div>
+`;
         } else {
           const fallback = h || path;
           headerHTML = `<code class="language-markup">${fallback}</code>`;
@@ -406,7 +528,10 @@
           const rowClass = tagComp.status === 'same' ? 'same' : 'different';
           html += `
             <h3>Tag Name</h3>
-            <table>
+            <table class="child-tag-table">
+  <colgroup>
+    <col><col><col>
+  </colgroup>
               <thead><tr><th>Element 1</th><th>Element 2</th><th>Status</th></tr></thead>
               <tbody>
                 <tr class="${rowClass}">
@@ -423,7 +548,10 @@
           const rowClass = textComp.status === 'same' ? 'same' : 'different';
           html += `
             <h3>Text Content</h3>
-            <table>
+            <table class="child-text-table">
+  <colgroup>
+    <col><col><col>
+  </colgroup>
               <thead><tr><th>Element 1</th><th>Element 2</th><th>Status</th></tr></thead>
               <tbody>
                 <tr class="${rowClass}">
@@ -438,7 +566,7 @@
 
         if (attrComps.length > 0) {
           html += `<h3>Attributes</h3>`;
-          html += `<table><thead><tr><th>Attribute</th><th>Element 1</th><th>Element 2</th><th>Status</th></tr></thead><tbody>`;
+          html += `<table class="child-attr-table"><colgroup><col><col><col><col></colgroup><thead><tr><th>Attribute</th><th>Element 1</th><th>Element 2</th><th>Status</th></tr></thead><tbody>`;
           for (const { detail, val1, val2, status } of attrComps) {
             const rowClass = status === 'same' ? 'same' :
                              status === 'different' ? 'different' : 'missing';
@@ -450,6 +578,13 @@
               v1 = enhanced.val1html;
               v2 = enhanced.val2html;
               st = enhanced.statusHTML;
+            }
+            // ---- ID enhancement in child attributes ----
+            const enhancedId = enhanceIdRow(detail, val1, val2, st);
+            if (enhancedId) {
+              v1 = enhancedId.val1html;
+              v2 = enhancedId.val2html;
+              st = enhancedId.statusHTML;
             }
             html += `
               <tr class="${rowClass}">
