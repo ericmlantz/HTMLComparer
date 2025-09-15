@@ -913,12 +913,14 @@ if (rowsToShow.size > 0) {
         const tag = (el.tagName || '').toLowerCase();
         const attrs = [
           ['id', el.getAttribute && el.getAttribute('id')],
-          ['deepui-id', el.getAttribute && el.getAttribute('deepui-id')],
           ['data-ui5-stable', el.getAttribute && el.getAttribute('data-ui5-stable')],
           ['data-help-id', el.getAttribute && el.getAttribute('data-help-id')],
-          ['olddeepui_id', el.getAttribute && el.getAttribute('olddeepui_id')],
         ];
-        for(const [k,v] of attrs){ if(v){ return `${tag}[${k}='${String(v).replace(/'/g,"\\'")}']`; } }
+        for (const [k, v] of attrs) {
+          if (!v) continue;
+          if (String(k).toLowerCase().includes('deepui')) continue; // never use deepui* attributes
+          return `${tag}[${k}='${String(v).replace(/'/g, "\\'")}']`;
+        }
         const cls = (el.getAttribute && (el.getAttribute('class')||'').trim().split(/\s+/).filter(Boolean)[0]) || '';
         if (cls) return `${tag}.${cls.replace(/[^\w-]/g,'')}`;
         return tag || '*';
