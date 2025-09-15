@@ -34,6 +34,21 @@
       font-weight: bold;
       font-size: 18px;
     }
+    mark { background: #ffeb3b; color: inherit; padding: 0 2px; border-radius: 2px; }
+    /* Modal styles */
+    .modal-backdrop { position: absolute; top: 0; left: 0; right: 0; background: rgba(0,0,0,.45); display: flex; align-items: flex-start; justify-content: center; z-index: 9999; padding: 24px 0; }
+    .modal { width: min(900px, 92vw); background: #fff; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.2); overflow: visible; }
+    .modal-header { display:flex; align-items:center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid #ddd; }
+    .modal-header h3 { margin: 0; font-size: 18px; }
+    .modal-header .close { border: 1px solid #ccc; background: #f8f8f8; border-radius: 4px; padding: 4px 8px; cursor: pointer; }
+    .modal-body { padding: 12px 14px; display:flex; flex-direction:column; gap: 8px; overflow: visible; }
+    .shadow-host-item textarea { width: 100%; }
+    .modal-body textarea { width: 100%; box-sizing: border-box; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .modal-body .primary { background: #2563eb; color: #fff; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; }
+    .modal-footer { padding: 10px 14px; border-top: 1px solid #ddd; text-align: right; }
+    /* Keep large, readable inputs even with many hosts */
+    #shadowHostList { max-height: none; overflow: visible; }
+    #shadowTargetInput, #shadowOutput { min-height: 140px; }
   </style>
   <style>
     summary.dual-triangles {
@@ -162,6 +177,33 @@ table.child-attr-table col:nth-child(4) { width: 10%; }
   </div>
 
   <button onclick="compare()">Compare</button>
+  <button id="shadowBtn" style="margin-left:8px;" onclick="openShadowModal()">Shadow Dom FuncStr Creation</button>
+
+  <!-- Shadow Dom FuncStr Creation Modal -->
+  <div id="shadowModal" class="modal-backdrop" style="display:none;">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Shadow Dom FuncStr Creation</h3>
+        <button class="close" onclick="closeShadowModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <label>Shadow root elements (outermost → innermost)</label>
+        <div id="shadowHostList"></div>
+        <div><button class="secondary" type="button" onclick="addShadowHost()">+ Add shadow root element</button></div>
+
+        <label style="margin-top:12px;">Requested element HTML</label>
+        <textarea id="shadowTargetInput" rows="5" placeholder="Paste the target element's HTML here"></textarea>
+
+        <button class="primary" onclick="generateShadowFuncStr()" style="margin-top:12px;">Generate</button>
+
+        <label style="margin-top:12px;">Generated function string</label>
+        <textarea id="shadowOutput" rows="7" readonly></textarea>
+      </div>
+      <div class="modal-footer">
+        <button onclick="closeShadowModal()">Close</button>
+      </div>
+    </div>
+  </div>
 
   <div id="result"></div>
 
@@ -210,6 +252,9 @@ table.child-attr-table col:nth-child(4) { width: 10%; }
       html += `<hr>`;
 
       html += `<div style="text-align: center; font-size: 24px; font-weight: bold; margin-top: 40px;">Child Structure Comparison</div>`;
+      html += `<div style="display:flex; justify-content:center; margin: 12px 0 18px;">
+                 <input id="filterInput" class="input" style="width: 60%; max-width: 700px; font-size: 18px; padding: 10px 12px;" placeholder="Search (e.g., div, class=btn, id=header, aria-label, or any text)">
+               </div>`;
       html += renderChildComparison(childComparison);
 
       document.getElementById('result').innerHTML = html;
@@ -518,7 +563,7 @@ table.child-attr-table col:nth-child(4) { width: 10%; }
           const fallback = h || path;
           headerHTML = `<code class="language-markup">${fallback}</code>`;
         }
-        html += `<details style="margin-left: ${indent}px;"><summary class="dual-triangles" style="--right-indent: ${indent}px; font-size: 1.1em; font-weight: bold; padding: 8px 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${headerHTML}</summary><div class="child-body" style="padding-right: ${indent}px;">`;
+        html += `<details data-left="${(h && typeof h === 'object') ? h.left.replace(/"/g,'&quot;') : ''}" data-right="${(h && typeof h === 'object') ? h.right.replace(/"/g,'&quot;') : ''}" style="margin-left: ${indent}px;"><summary class="dual-triangles" style="--right-indent: ${indent}px; font-size: 1.1em; font-weight: bold; padding: 8px 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${headerHTML}</summary><div class="child-body" style="padding-right: ${indent}px;">`;
 
         const tagComp = grouped[path].find(e => e.type === 'tag');
         const textComp = grouped[path].find(e => e.type === 'text');
@@ -527,44 +572,45 @@ table.child-attr-table col:nth-child(4) { width: 10%; }
         if (tagComp) {
           const rowClass = tagComp.status === 'same' ? 'same' : 'different';
           html += `
-            <h3>Tag Name</h3>
-            <table class="child-tag-table">
-  <colgroup>
-    <col><col><col>
-  </colgroup>
-              <thead><tr><th>Element 1</th><th>Element 2</th><th>Status</th></tr></thead>
-              <tbody>
-                <tr class="${rowClass}">
-                  <td>${tagComp.val1 || '<i>empty</i>'}</td>
-                  <td>${tagComp.val2 || '<i>empty</i>'}</td>
-                  <td>${tagComp.status}</td>
-                </tr>
-              </tbody>
-            </table>
+            <div class="section section-tag">
+              <h3>Tag Name</h3>
+              <table class="child-tag-table">
+                <colgroup><col><col><col></colgroup>
+                <thead><tr><th>Element 1</th><th>Element 2</th><th>Status</th></tr></thead>
+                <tbody>
+                  <tr class="${rowClass}">
+                    <td>${tagComp.val1 || '<i>empty</i>'}</td>
+                    <td>${tagComp.val2 || '<i>empty</i>'}</td>
+                    <td>${tagComp.status}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           `;
         }
 
         if (textComp) {
           const rowClass = textComp.status === 'same' ? 'same' : 'different';
           html += `
-            <h3>Text Content</h3>
-            <table class="child-text-table">
-  <colgroup>
-    <col><col><col>
-  </colgroup>
-              <thead><tr><th>Element 1</th><th>Element 2</th><th>Status</th></tr></thead>
-              <tbody>
-                <tr class="${rowClass}">
-                  <td>${textComp.val1 || '<i>empty</i>'}</td>
-                  <td>${textComp.val2 || '<i>empty</i>'}</td>
-                  <td>${textComp.status}</td>
-                </tr>
-              </tbody>
-            </table>
+            <div class="section section-text">
+              <h3>Text Content</h3>
+              <table class="child-text-table">
+                <colgroup><col><col><col></colgroup>
+                <thead><tr><th>Element 1</th><th>Element 2</th><th>Status</th></tr></thead>
+                <tbody>
+                  <tr class="${rowClass}">
+                    <td>${textComp.val1 || '<i>empty</i>'}</td>
+                    <td>${textComp.val2 || '<i>empty</i>'}</td>
+                    <td>${textComp.status}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           `;
         }
 
         if (attrComps.length > 0) {
+          html += `<div class="section section-attrs">`;
           html += `<h3>Attributes</h3>`;
           html += `<table class="child-attr-table"><colgroup><col><col><col><col></colgroup><thead><tr><th>Attribute</th><th>Element 1</th><th>Element 2</th><th>Status</th></tr></thead><tbody>`;
           for (const { detail, val1, val2, status } of attrComps) {
@@ -579,7 +625,6 @@ table.child-attr-table col:nth-child(4) { width: 10%; }
               v2 = enhanced.val2html;
               st = enhanced.statusHTML;
             }
-            // ---- ID enhancement in child attributes ----
             const enhancedId = enhanceIdRow(detail, val1, val2, st);
             if (enhancedId) {
               v1 = enhancedId.val1html;
@@ -587,7 +632,7 @@ table.child-attr-table col:nth-child(4) { width: 10%; }
               st = enhancedId.statusHTML;
             }
             html += `
-              <tr class="${rowClass}">
+              <tr class="${rowClass}" data-attr="${detail}">
                 <td>${detail}</td>
                 <td>${v1}</td>
                 <td>${v2}</td>
@@ -595,7 +640,7 @@ table.child-attr-table col:nth-child(4) { width: 10%; }
               </tr>
             `;
           }
-          html += '</tbody></table>';
+          html += '</tbody></table></div>';
         }
 
         html += `</div></details><hr>`;
@@ -635,6 +680,270 @@ table.child-attr-table col:nth-child(4) { width: 10%; }
         }
       }
       return result.trim();
+    }
+
+    // --- Safe highlighter helpers (preserve Prism markup) ---
+    function unwrapMarks(root) {
+      root.querySelectorAll('mark').forEach(m => {
+        const text = document.createTextNode(m.textContent);
+        m.replaceWith(text);
+      });
+    }
+
+    function markMatchesInElement(el, query) {
+      if (!query) return;
+      const needle = query.toLowerCase();
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+      const toProcess = [];
+      let node;
+      while ((node = walker.nextNode())) {
+        const src = node.nodeValue;
+        const lc = src.toLowerCase();
+        if (!lc || lc.indexOf(needle) === -1) continue;
+        toProcess.push(node);
+      }
+      for (const textNode of toProcess) {
+        let text = textNode.nodeValue;
+        let lc = text.toLowerCase();
+        if (!lc) continue;
+        const frag = document.createDocumentFragment();
+        let idx = lc.indexOf(needle);
+        while (idx !== -1) {
+          const before = text.slice(0, idx);
+          const hit = text.slice(idx, idx + needle.length);
+          if (before) frag.appendChild(document.createTextNode(before));
+          const mark = document.createElement('mark');
+          mark.textContent = hit;
+          frag.appendChild(mark);
+          text = text.slice(idx + needle.length);
+          lc = text.toLowerCase();
+          idx = lc.indexOf(needle);
+        }
+        if (text) frag.appendChild(document.createTextNode(text));
+        textNode.replaceWith(frag);
+      }
+    }
+
+    function applyChildFilter(q) {
+      // Multiple tokens supported; AND logic across tokens.
+      // Tokens can be: tag (e.g., div), class=value, attr, attr=value, or any free text.
+      const tokens = (q || '').trim().split(/\s+/).filter(Boolean).map(t => t.toLowerCase());
+      const detailsNodes = document.querySelectorAll('#result details');
+
+      detailsNodes.forEach(d => {
+        // Clear previous highlighting ONLY (keep Prism spans intact)
+        unwrapMarks(d);
+
+        // Reset visibility
+        const secTag = d.querySelector('.section-tag');
+        const secText = d.querySelector('.section-text');
+        const secAttrs = d.querySelector('.section-attrs');
+        if (secTag) secTag.style.display = 'none';
+        if (secText) secText.style.display = 'none';
+        if (secAttrs) {
+          secAttrs.style.display = 'none';
+          secAttrs.querySelectorAll('tbody tr').forEach(tr => tr.style.display = 'none');
+        }
+
+        if (tokens.length === 0) {
+          // Show all when empty
+          if (secTag) secTag.style.display = '';
+          if (secText) secText.style.display = '';
+          if (secAttrs) secAttrs.style.display = '';
+          if (secAttrs) secAttrs.querySelectorAll('tbody tr').forEach(tr => tr.style.display = '');
+          d.style.display = '';
+          return;
+        }
+
+        const leftHeader = d.getAttribute('data-left')?.toLowerCase() || '';
+        const rightHeader = d.getAttribute('data-right')?.toLowerCase() || '';
+
+        let allTokensMatched = true;
+        let anySectionVisible = false;
+        const rowsToShow = new Set(); // union of matching rows across tokens
+
+        for (const rawTok of tokens) {
+          let matched = false;
+
+          if (rawTok.startsWith('class=')) {
+            const val = rawTok.slice(6);
+            // class row contains value
+            if (secAttrs) {
+              secAttrs.querySelectorAll('tbody tr').forEach(tr => {
+                const attr = (tr.getAttribute('data-attr') || '').toLowerCase();
+                if (attr === 'class' && tr.innerText.toLowerCase().includes(val)) {
+                  rowsToShow.add(tr);
+                  matched = true;
+                  // highlight cells with the value
+                  markMatchesInElement(tr, val);
+                }
+              });
+            }
+            // header contains class and value
+            if ((leftHeader.includes('class="') && leftHeader.includes(val)) ||
+                (rightHeader.includes('class="') && rightHeader.includes(val))) {
+              matched = true;
+              anySectionVisible = true;
+              d.querySelectorAll('summary code').forEach(code => markMatchesInElement(code, val));
+            }
+          } else if (rawTok.includes('=')) {
+            // generic attr=value
+            const [name, valueRaw] = rawTok.split('=');
+            const nameL = name.trim();
+            const valueL = (valueRaw || '').trim();
+            if (secAttrs) {
+              secAttrs.querySelectorAll('tbody tr').forEach(tr => {
+                const attr = (tr.getAttribute('data-attr') || '').toLowerCase();
+                if (attr === nameL && (!valueL || tr.innerText.toLowerCase().includes(valueL))) {
+                  rowsToShow.add(tr);
+                  matched = true;
+                  // highlight attribute name and value
+                  const nameCell = tr.querySelector('td:first-child');
+                  if (nameCell) markMatchesInElement(nameCell, nameL);
+                  if (valueL) markMatchesInElement(tr, valueL);
+                }
+              });
+            }
+            // header match too
+            if ((leftHeader.includes(`${nameL}="`) && (!valueL || leftHeader.includes(valueL))) ||
+                (rightHeader.includes(`${nameL}="`) && (!valueL || rightHeader.includes(valueL)))) {
+              matched = true;
+              anySectionVisible = true;
+              d.querySelectorAll('summary code').forEach(code => markMatchesInElement(code, nameL));
+              if (valueL) d.querySelectorAll('summary code').forEach(code => markMatchesInElement(code, valueL));
+            }
+          } else {
+            // free text or tag
+const maybeTag = rawTok;
+const headerHasTag = leftHeader.includes(`<${maybeTag}`) || rightHeader.includes(`<${maybeTag}`);
+const headerHasText = leftHeader.includes(maybeTag) || rightHeader.includes(maybeTag);
+if (headerHasTag || headerHasText) {
+  matched = true;
+  if (secTag) secTag.style.display = '';
+  anySectionVisible = true; // ensure node stays visible on header-only matches
+  d.querySelectorAll('summary code').forEach(code => markMatchesInElement(code, maybeTag));
+}
+// Search ANY cell in ANY section for the text
+            const allRows = d.querySelectorAll('.section-tag tbody tr, .section-text tbody tr, .section-attrs tbody tr');
+            allRows.forEach(tr => {
+              if (tr.innerText.toLowerCase().includes(maybeTag)) {
+                rowsToShow.add(tr);
+                matched = true;
+                markMatchesInElement(tr, maybeTag);
+              }
+            });
+          }
+
+          if (!matched) allTokensMatched = false;
+        }
+
+        // Show accumulated rows
+if (rowsToShow.size > 0) {
+  rowsToShow.forEach(tr => {
+    const section = tr.closest('.section'); // show the section wrapper itself
+    if (section) section.style.display = '';
+    tr.style.display = '';
+  });
+  anySectionVisible = true;
+}
+
+        // Ensure Tag/Text sections are visible if they contain shown rows
+        const ensureVisible = (sel) => {
+          const sec = d.querySelector(sel);
+          if (!sec) return;
+          const anyRow = sec.querySelector('tbody tr:not([style*="display: none"])');
+          if (anyRow) sec.style.display = '';
+        };
+        ensureVisible('.section-tag');
+        ensureVisible('.section-text');
+        ensureVisible('.section-attrs');
+
+        d.style.display = (allTokensMatched && anySectionVisible) ? '' : 'none';
+      });
+    }
+
+    document.addEventListener('input', (e) => {
+      if (e.target && e.target.id === 'filterInput') {
+        applyChildFilter(e.target.value);
+      }
+    });
+    // --- Shadow Dom FuncStr modal controls ---
+    function openShadowModal(){
+      const modal = document.getElementById('shadowModal');
+      modal.style.display = 'flex';
+      const list = document.getElementById('shadowHostList');
+      if (list && list.children.length === 0) {
+        addShadowHost();
+      }
+    }
+    function addShadowHost(preset){
+      const list = document.getElementById('shadowHostList');
+      if (!list) return;
+      const wrapper = document.createElement('div');
+      wrapper.className = 'shadow-host-item';
+      wrapper.style.marginTop = '8px';
+      wrapper.innerHTML = `
+        <div style="display:flex; gap:8px; align-items:flex-start;">
+          <textarea class="shadowHostTextarea" rows="3" placeholder="Paste one shadow host element HTML (e.g., <xweb-shellbar ...>)">${preset ? preset.replace(/`/g,'\`') : ''}</textarea>
+          <button type="button" onclick="this.closest('.shadow-host-item').remove()">Remove</button>
+        </div>`;
+      list.appendChild(wrapper);
+    }
+    function closeShadowModal(){ document.getElementById('shadowModal').style.display='none'; }
+
+    // --- Generate the jQuery + shadowRoot chain ---
+    function generateShadowFuncStr(){
+      const out = document.getElementById('shadowOutput');
+      out.value = '';
+
+      // Collect all provided shadow host elements
+      const hostEls = Array.from(document.querySelectorAll('#shadowHostList .shadowHostTextarea'))
+        .map(t => t.value.trim())
+        .filter(Boolean)
+        .map(html => { const d=document.createElement('div'); d.innerHTML = html; return d.firstElementChild; })
+        .filter(el => !!el);
+
+      if (hostEls.length === 0) {
+        out.value = '// Add at least one shadow root element (outermost → innermost).';
+        return;
+      }
+
+      // Prefer a specific selector for custom elements
+      function bestSelector(el){
+        const tag = (el.tagName || '').toLowerCase();
+        const attrs = [
+          ['id', el.getAttribute && el.getAttribute('id')],
+          ['deepui-id', el.getAttribute && el.getAttribute('deepui-id')],
+          ['data-ui5-stable', el.getAttribute && el.getAttribute('data-ui5-stable')],
+          ['data-help-id', el.getAttribute && el.getAttribute('data-help-id')],
+          ['olddeepui_id', el.getAttribute && el.getAttribute('olddeepui_id')],
+        ];
+        for(const [k,v] of attrs){ if(v){ return `${tag}[${k}='${String(v).replace(/'/g,"\\'")}']`; } }
+        const cls = (el.getAttribute && (el.getAttribute('class')||'').trim().split(/\s+/).filter(Boolean)[0]) || '';
+        if (cls) return `${tag}.${cls.replace(/[^\w-]/g,'')}`;
+        return tag || '*';
+      }
+
+      // Build the chain based on provided hosts, outermost → innermost
+      const lines = [];
+      const shadowVars = [];
+      hostEls.forEach((host, idx) => {
+        const varName = idx===0 ? 'first' : `h${idx+1}`;
+        const shadowVar = idx===0 ? 'firstShadow' : `${varName}Shadow`;
+        const selector = bestSelector(host);
+        if (idx === 0) {
+          lines.push(`const ${varName} = wmjQuery("${selector}")[0];`);
+        } else {
+          const prevShadow = idx===1 ? 'firstShadow' : `h${idx}.shadowRoot`;
+          lines.push(`const ${varName} = wmjQuery("${selector}", ${prevShadow})[0];`);
+        }
+        lines.push(`const ${shadowVar} = ${varName} && ${varName}.shadowRoot;`);
+        shadowVars.push(`${shadowVar}`);
+      });
+
+      lines.push(shadowVars.join(', '));
+
+      out.value = lines.join('\n');
     }
   </script>
 </body>
